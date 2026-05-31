@@ -753,8 +753,8 @@ body::after {
   // Paste your Anthropic key here to enable ✨ Polish. Empty = falls back to plain add.
   const ANTHROPIC_API_KEY = '';
 
-  const WAKE_HOUR  = 8;
-  const SLEEP_HOUR = 24;
+  const WAKE_HOUR  = 11;
+  const SLEEP_HOUR = 25; // 1 AM next day
 
   // ---------- storage helpers ----------
   function storeGet(key) {
@@ -993,7 +993,8 @@ body::after {
 
   function updateDayRing() {
     const now = new Date();
-    const hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+    let hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+    if (hours < 6) hours += 24; // midnight–6 AM is the tail of the previous active day
     const percentEl   = document.getElementById('dayRingPercent');
     const phaseEl     = document.getElementById('dayRingPhase');
     const clockEl     = document.getElementById('dayRingClock');
