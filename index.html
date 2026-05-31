@@ -617,8 +617,8 @@ body::after {
 
 /* ===== Time input + badge ===== */
 .gm-time-input {
-  width: 88px; flex-shrink: 0;
-  padding: 10px 8px;
+  width: 80px; flex-shrink: 0;
+  padding: 10px 6px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 12px;
   background: rgba(0,0,0,0.25);
@@ -627,6 +627,14 @@ body::after {
   outline: none; -webkit-appearance: none; appearance: none;
 }
 .gm-time-input:focus { border-color: rgba(255,255,255,0.22); color: var(--text-primary); }
+.gm-time-sep {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 0 1px;
+  line-height: 1;
+  align-self: center;
+}
 .gm-time-badge {
   flex-shrink: 0;
   font-family: var(--font-mono); font-size: 11px;
@@ -715,7 +723,9 @@ body::after {
       <button type="button" id="gmPushBtn" class="gm-push-btn" style="display:none;">Push remaining to tomorrow</button>
       <div class="goal-input-wrap gm-input-wrap">
         <input id="goalInput" class="gm-input" type="text" placeholder="Add a goal for today…" autocomplete="off">
-        <input id="goalTimeInput" class="gm-time-input" type="time" aria-label="Time (optional)">
+        <input id="goalTimeStart" class="gm-time-input" type="time" aria-label="Start time">
+        <span class="gm-time-sep">–</span>
+        <input id="goalTimeEnd" class="gm-time-input" type="time" aria-label="End time">
         <button type="button" id="goalAddBtn"    class="gm-add">+ Add</button>
         <button type="button" id="goalPolishBtn" class="gm-polish">✨ Polish</button>
         <div class="gm-status" id="polishStatus"></div>
@@ -736,7 +746,9 @@ body::after {
       <div id="upcomingEmpty" class="empty-state">Nothing planned for this day yet</div>
       <div class="goal-input-wrap gm-input-wrap">
         <input id="upcomingInput" class="gm-input" type="text" placeholder="Add a goal for this day…" autocomplete="off">
-        <input id="upcomingTimeInput" class="gm-time-input" type="time" aria-label="Time (optional)">
+        <input id="upcomingTimeStart" class="gm-time-input" type="time" aria-label="Start time">
+        <span class="gm-time-sep">–</span>
+        <input id="upcomingTimeEnd" class="gm-time-input" type="time" aria-label="End time">
         <button type="button" id="upcomingAddBtn"    class="gm-add">+ Add</button>
         <button type="button" id="upcomingPolishBtn" class="gm-polish">✨ Polish</button>
         <div class="gm-status" id="upcomingStatus"></div>
@@ -842,7 +854,9 @@ body::after {
       old.forEach(g => {
         if (!g.done && g.text && !texts.has(g.text)) {
           const entry = { text: g.text, done: false };
-          if (g.time) entry.time = g.time;
+          if (g.timeStart) entry.timeStart = g.timeStart;
+          if (g.timeEnd)   entry.timeEnd   = g.timeEnd;
+          if (!g.timeStart && g.time) entry.time = g.time;
           today.push(entry);
           texts.add(g.text);
         }
@@ -1132,10 +1146,16 @@ body::after {
     });
     li.appendChild(cb);
 
-    if (goal.time) {
+    if (goal.timeStart || goal.time) {
       const badge = document.createElement('span');
       badge.className = 'gm-time-badge';
-      badge.textContent = fmtTime(goal.time);
+      if (goal.timeStart && goal.timeEnd) {
+        badge.textContent = fmtTime(goal.timeStart) + ' – ' + fmtTime(goal.timeEnd);
+      } else if (goal.timeStart) {
+        badge.textContent = fmtTime(goal.timeStart);
+      } else {
+        badge.textContent = fmtTime(goal.time); // backward compat
+      }
       li.appendChild(badge);
     }
 
@@ -1344,17 +1364,19 @@ body::after {
     return arr[0].trim();
   }
 
-  function makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload, timeInput) {
+  function makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload, timeStartInput, timeEndInput) {
     function resolveKey() { return typeof key === 'function' ? key() : key; }
     function plainAdd(text) {
       const k = resolveKey();
       const list = getGoals(k);
       const goal = { text, done: false };
-      if (timeInput && timeInput.value) goal.time = timeInput.value;
+      if (timeStartInput && timeStartInput.value) goal.timeStart = timeStartInput.value;
+      if (timeEndInput   && timeEndInput.value)   goal.timeEnd   = timeEndInput.value;
       list.push(goal);
       setGoals(k, list);
       input.value = '';
-      if (timeInput) timeInput.value = '';
+      if (timeStartInput) timeStartInput.value = '';
+      if (timeEndInput)   timeEndInput.value   = '';
       reload();
     }
     addBtn.addEventListener('click', () => {
@@ -1393,7 +1415,8 @@ body::after {
     todayKey,
     document.getElementById('polishStatus'),
     loadToday,
-    document.getElementById('goalTimeInput')
+    document.getElementById('goalTimeStart'),
+    document.getElementById('goalTimeEnd')
   );
   makeAddHandlers(
     document.getElementById('upcomingInput'),
@@ -1402,7 +1425,8 @@ body::after {
     upcomingKey,
     document.getElementById('upcomingStatus'),
     () => { renderDayTabs(); loadUpcoming(); },
-    document.getElementById('upcomingTimeInput')
+    document.getElementById('upcomingTimeStart'),
+    document.getElementById('upcomingTimeEnd')
   );
 
   // ---------- Boot ----------
