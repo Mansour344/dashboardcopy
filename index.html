@@ -588,6 +588,56 @@ body::after {
 }
 .gm-status.gm-status-error { color: var(--danger); }
 
+/* ===== Multi-day planner: day tabs ===== */
+.gm-day-tabs {
+  display: flex; gap: 6px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding-bottom: 10px;
+  scrollbar-width: none;
+}
+.gm-day-tabs::-webkit-scrollbar { display: none; }
+.gm-day-tab {
+  flex-shrink: 0; cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 9px;
+  background: rgba(255,255,255,0.035);
+  color: var(--text-secondary);
+  font-family: var(--font); font-size: 12px; font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.gm-day-tab:hover { background: rgba(255,255,255,0.07); }
+.gm-day-tab.active {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.22);
+  color: var(--text-primary);
+}
+.gm-day-tab-count { margin-left: 5px; font-size: 10px; opacity: 0.6; }
+
+/* ===== Time input + badge ===== */
+.gm-time-input {
+  width: 88px; flex-shrink: 0;
+  padding: 10px 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.25);
+  color: var(--text-secondary);
+  font-family: var(--font-mono); font-size: 12px;
+  outline: none; -webkit-appearance: none; appearance: none;
+}
+.gm-time-input:focus { border-color: rgba(255,255,255,0.22); color: var(--text-primary); }
+.gm-time-badge {
+  flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-tertiary);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
 @media (max-width: 480px) {
   body { padding: max(20px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 50px max(14px, env(safe-area-inset-left)); }
   .gm-card { padding: 16px; }
@@ -665,28 +715,31 @@ body::after {
       <button type="button" id="gmPushBtn" class="gm-push-btn" style="display:none;">Push remaining to tomorrow</button>
       <div class="goal-input-wrap gm-input-wrap">
         <input id="goalInput" class="gm-input" type="text" placeholder="Add a goal for today…" autocomplete="off">
+        <input id="goalTimeInput" class="gm-time-input" type="time" aria-label="Time (optional)">
         <button type="button" id="goalAddBtn"    class="gm-add">+ Add</button>
         <button type="button" id="goalPolishBtn" class="gm-polish">✨ Polish</button>
         <div class="gm-status" id="polishStatus"></div>
       </div>
     </div>
 
-    <!-- PLAN TOMORROW -->
-    <div class="gm-card gm-card-tomorrow" id="gmCardTomorrow">
+    <!-- UPCOMING DAYS (tomorrow → +6) -->
+    <div class="gm-card gm-card-tomorrow" id="gmCardUpcoming">
       <div class="gm-header">
         <div class="gm-header-left">
-          <div class="gm-eyebrow" id="tomorrowLabel">Plan tomorrow —</div>
-          <div class="gm-tomorrow-sub">Write tonight, locked until 6 AM.</div>
+          <div class="gm-eyebrow" id="upcomingLabel">Plan ahead —</div>
+          <div class="gm-tomorrow-sub" id="upcomingSub">Locked until that day starts at 6 AM.</div>
         </div>
-        <div class="gm-tomorrow-count" id="gmTomorrowCount">0 planned</div>
+        <div class="gm-tomorrow-count" id="gmUpcomingCount">0 planned</div>
       </div>
-      <ul id="tomorrowList" class="goal-list gm-list"></ul>
-      <div id="tomorrowEmpty" class="empty-state">Nothing planned for tomorrow yet</div>
+      <div class="gm-day-tabs" id="gmDayTabs"></div>
+      <ul id="upcomingList" class="goal-list gm-list"></ul>
+      <div id="upcomingEmpty" class="empty-state">Nothing planned for this day yet</div>
       <div class="goal-input-wrap gm-input-wrap">
-        <input id="tomorrowInput" class="gm-input" type="text" placeholder="Add a goal for tomorrow…" autocomplete="off">
-        <button type="button" id="tomorrowAddBtn"    class="gm-add">+ Add</button>
-        <button type="button" id="tomorrowPolishBtn" class="gm-polish">✨ Polish</button>
-        <div class="gm-status" id="tomorrowStatus"></div>
+        <input id="upcomingInput" class="gm-input" type="text" placeholder="Add a goal for this day…" autocomplete="off">
+        <input id="upcomingTimeInput" class="gm-time-input" type="time" aria-label="Time (optional)">
+        <button type="button" id="upcomingAddBtn"    class="gm-add">+ Add</button>
+        <button type="button" id="upcomingPolishBtn" class="gm-polish">✨ Polish</button>
+        <div class="gm-status" id="upcomingStatus"></div>
       </div>
     </div>
   </div>
@@ -752,6 +805,23 @@ body::after {
   function todayKey()    { return 'goals:' + getActiveDateString(); }
   function tomorrowKey() { return 'goals:' + getTomorrowDateString(); }
 
+  function getFutureDateString(n) {
+    const base = getActiveDateString();
+    const [y, m, d] = base.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + n);
+    return dateToKey(dt);
+  }
+  let activeFutureOffset = 1;
+  function upcomingKey() { return 'goals:' + getFutureDateString(activeFutureOffset); }
+
+  function fmtTime(t) {
+    if (!t) return '';
+    const [hStr, mStr] = t.split(':');
+    const h = parseInt(hStr, 10), m = parseInt(mStr, 10);
+    return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h >= 12 ? 'pm' : 'am');
+  }
+
   function getGoals(key) {
     const g = storeGet(key);
     return Array.isArray(g) ? g : [];
@@ -771,7 +841,9 @@ body::after {
       const old = getGoals(k);
       old.forEach(g => {
         if (!g.done && g.text && !texts.has(g.text)) {
-          today.push({ text: g.text, done: false });
+          const entry = { text: g.text, done: false };
+          if (g.time) entry.time = g.time;
+          today.push(entry);
           texts.add(g.text);
         }
       });
@@ -1059,6 +1131,13 @@ body::after {
     });
     li.appendChild(cb);
 
+    if (goal.time) {
+      const badge = document.createElement('span');
+      badge.className = 'gm-time-badge';
+      badge.textContent = fmtTime(goal.time);
+      li.appendChild(badge);
+    }
+
     const text = document.createElement('span');
     text.className = 'gm-text';
     text.textContent = goal.text;
@@ -1134,17 +1213,37 @@ body::after {
     document.getElementById('gmStreak').classList.toggle('gm-streak-active', s.count > 0);
   }
 
-  function renderTomorrowCount() {
-    const list = getGoals(tomorrowKey());
-    document.getElementById('gmTomorrowCount').textContent = list.length + ' planned';
-    document.getElementById('tomorrowLabel').textContent =
-      'Plan tomorrow — ' + formatDate(getTomorrowDateString());
+  function renderUpcomingHeader() {
+    const list = getGoals(upcomingKey());
+    document.getElementById('gmUpcomingCount').textContent = list.length + ' planned';
+    document.getElementById('upcomingLabel').textContent =
+      formatDate(getFutureDateString(activeFutureOffset));
+  }
+
+  function renderDayTabs() {
+    const tabs = document.getElementById('gmDayTabs');
+    tabs.innerHTML = '';
+    for (let i = 1; i <= 6; i++) {
+      const dateStr = getFutureDateString(i);
+      const count = getGoals('goals:' + dateStr).length;
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'gm-day-tab' + (i === activeFutureOffset ? ' active' : '');
+      tab.innerHTML = formatDate(dateStr) +
+        (count ? '<span class="gm-day-tab-count">(' + count + ')</span>' : '');
+      tab.addEventListener('click', () => {
+        activeFutureOffset = i;
+        renderDayTabs();
+        loadUpcoming();
+      });
+      tabs.appendChild(tab);
+    }
   }
 
   function renderListInto(goals, listEl, emptyEl, key, readOnly) {
     listEl.innerHTML = '';
     emptyEl.style.display = goals.length === 0 ? 'block' : 'none';
-    const reload = () => (key === todayKey() ? loadToday() : loadTomorrow());
+    const reload = () => { if (key === todayKey()) { loadToday(); } else { renderDayTabs(); loadUpcoming(); } };
 
     const visible = goals.length > 5 ? goals.slice(0, 5) : goals;
     visible.forEach((g, i) => listEl.appendChild(buildGoalRow(g, i, key, readOnly, reload)));
@@ -1174,16 +1273,17 @@ body::after {
     }
 
     if (key === todayKey()) renderTodayHeader();
-    else                    renderTomorrowCount();
+    else renderUpcomingHeader();
   }
 
   function loadToday() {
     const goals = getGoals(todayKey());
     renderListInto(goals, document.getElementById('goalList'), document.getElementById('emptyState'), todayKey(), false);
   }
-  function loadTomorrow() {
-    const goals = getGoals(tomorrowKey());
-    renderListInto(goals, document.getElementById('tomorrowList'), document.getElementById('tomorrowEmpty'), tomorrowKey(), true);
+  function loadUpcoming() {
+    const key = upcomingKey();
+    const goals = getGoals(key);
+    renderListInto(goals, document.getElementById('upcomingList'), document.getElementById('upcomingEmpty'), key, true);
   }
 
   // ---------- Push remaining ----------
@@ -1191,15 +1291,21 @@ body::after {
     const today    = getGoals(todayKey());
     const remaining = today.filter(g => !g.done);
     if (remaining.length === 0) return;
-    if (!confirm('Move ' + remaining.length + ' unchecked goal' + (remaining.length === 1 ? '' : 's') + ' to tomorrow?')) return;
-    const tomorrow = getGoals(tomorrowKey());
-    const seen = new Set(tomorrow.map(g => g.text));
+    const destLabel = activeFutureOffset === 1 ? 'tomorrow' : formatDate(getFutureDateString(activeFutureOffset));
+    if (!confirm('Move ' + remaining.length + ' unchecked goal' + (remaining.length === 1 ? '' : 's') + ' to ' + destLabel + '?')) return;
+    const dest = getGoals(upcomingKey());
+    const seen = new Set(dest.map(g => g.text));
     remaining.forEach(g => {
-      if (!seen.has(g.text)) { tomorrow.push({ text: g.text, done: false }); seen.add(g.text); }
+      if (!seen.has(g.text)) {
+        const entry = { text: g.text, done: false };
+        if (g.time) entry.time = g.time;
+        dest.push(entry);
+        seen.add(g.text);
+      }
     });
-    setGoals(tomorrowKey(), tomorrow);
+    setGoals(upcomingKey(), dest);
     setGoals(todayKey(), today.filter(g => g.done));
-    loadToday(); loadTomorrow();
+    loadToday(); renderDayTabs(); loadUpcoming();
   });
 
   // ---------- Add + Polish handlers ----------
@@ -1237,12 +1343,17 @@ body::after {
     return arr[0].trim();
   }
 
-  function makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload) {
+  function makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload, timeInput) {
+    function resolveKey() { return typeof key === 'function' ? key() : key; }
     function plainAdd(text) {
-      const list = getGoals(key);
-      list.push({ text, done: false });
-      setGoals(key, list);
+      const k = resolveKey();
+      const list = getGoals(k);
+      const goal = { text, done: false };
+      if (timeInput && timeInput.value) goal.time = timeInput.value;
+      list.push(goal);
+      setGoals(k, list);
       input.value = '';
+      if (timeInput) timeInput.value = '';
       reload();
     }
     addBtn.addEventListener('click', () => {
@@ -1278,24 +1389,27 @@ body::after {
     document.getElementById('goalInput'),
     document.getElementById('goalAddBtn'),
     document.getElementById('goalPolishBtn'),
-    todayKey(),
+    todayKey,
     document.getElementById('polishStatus'),
-    loadToday
+    loadToday,
+    document.getElementById('goalTimeInput')
   );
   makeAddHandlers(
-    document.getElementById('tomorrowInput'),
-    document.getElementById('tomorrowAddBtn'),
-    document.getElementById('tomorrowPolishBtn'),
-    tomorrowKey(),
-    document.getElementById('tomorrowStatus'),
-    loadTomorrow
+    document.getElementById('upcomingInput'),
+    document.getElementById('upcomingAddBtn'),
+    document.getElementById('upcomingPolishBtn'),
+    upcomingKey,
+    document.getElementById('upcomingStatus'),
+    () => { renderDayTabs(); loadUpcoming(); },
+    document.getElementById('upcomingTimeInput')
   );
 
   // ---------- Boot ----------
   rollover();
   processStreak();
   loadToday();
-  loadTomorrow();
+  renderDayTabs();
+  loadUpcoming();
   renderStreak();
   updateDayRing();
   setInterval(updateDayRing, 60 * 1000);
@@ -1303,7 +1417,7 @@ body::after {
 
   // Re-render when storage changes from another tab (or our bridged parent).
   window.addEventListener('storage', () => {
-    loadToday(); loadTomorrow(); renderStreak();
+    loadToday(); renderDayTabs(); loadUpcoming(); renderStreak();
   });
 })();
 </script>
