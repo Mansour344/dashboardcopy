@@ -5,9 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050506">
 <title>Mansour's Dashboard</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dashboard">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="sync.js" defer></script>
   <script src="topbar.js" defer></script>
+  <script src="notifications.js" defer></script>
 <style>
 :root {
   --text-primary: #FAFAFA;
@@ -699,6 +705,7 @@ body::after {
 
   <div class="section">
     <div class="section-title">To Do List</div>
+    <div id="reminderMount"></div>
 
     <!-- TODAY -->
     <div class="gm-card" id="gmCardToday">
